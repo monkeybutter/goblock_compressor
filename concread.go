@@ -2,31 +2,21 @@ package main
 
 import (
     "io"
-    "bytes"
-    "compress/gzip"
+    "runtime"
     "os"
 )
 
 
 // number of goroutines
-const n_goroutines = 8
+const n_goroutines = 1
 
 // channel for storing goroutines
 var routines_chan = make(chan bool, n_goroutines)
 
-func compress(chunk []byte, n int) []byte{
-    var buf bytes.Buffer
-    writer := gzip.NewWriter(&buf)
-    writer.Write(chunk[:n])
-    writer.Close()
-
-    return buf.Bytes()
-}
-
-func write_chunk(fi io.Reader, fo io.Writer) {
+func read_chunk(fi io.Reader) {
 
     // define block size
-    buf := make([]byte, 1024)
+    buf := make([]byte, 100000*1024)
 
     for {
         // read a chunk
@@ -38,11 +28,6 @@ func write_chunk(fi io.Reader, fo io.Writer) {
             break
         }
 
-        // write a chunk
-        if _, err := fo.Write(compress(buf, n)); err != nil {
-            panic(err)
-        }
-
     }
 
     routines_chan <- true
@@ -50,7 +35,7 @@ func write_chunk(fi io.Reader, fo io.Writer) {
 }
 
 func main() {
-
+    runtime.GOMAXPROCS(1)
     // open input file
     fi, err := os.Open("array.bin")
     if err != nil {
@@ -63,21 +48,10 @@ func main() {
         }
     }()
 
-    // open output file
-    fo, err := os.Create("output.bin")
-    if err != nil {
-        panic(err)
-    }
-    // close fo on exit and check for its returned error
-    defer func() {
-        if err := fo.Close(); err != nil {
-            panic(err)
-        }
-    }()
 
     // Distribute work into routines
     for i := 0; i < n_goroutines; i++ {
-        go write_chunk(fi, fo)
+        go read_chunk(fi)
     }
 
     // Wait for them to finish
