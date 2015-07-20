@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
-    "runtime"
+	"runtime"
 )
 
 // number of goroutines
@@ -36,7 +36,7 @@ func write_chunk(buffer []byte, n int, fo io.Writer) {
 
 func main() {
 
-    runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(4)
 
 	// open input file
 	fi, err := os.Open("input.min")
@@ -74,13 +74,13 @@ func main() {
 		if n == 0 {
 			break
 		}
-        routines_chan <- true
+		routines_chan <- true
 		go write_chunk(buf, n, fo)
 	}
 
-    // Wait for them to finish
-    for i := 0; i < n_goroutines; i++ {
-        routines_chan <- true
-    }
+	// Wait for them to finish
+	for i := 0; i < n_goroutines; i++ {
+		routines_chan <- true
+	}
 
 }
