@@ -10,13 +10,16 @@ import (
 // number of goroutines
 const n_goroutines = 1
 
+// kilobyte
+const kb = 1024
+
 // channel for storing goroutines
 var routines_chan = make(chan bool, n_goroutines)
 
 func read_chunk(fi io.Reader) {
 
     // define block size
-    buf := make([]byte, 100000*1024)
+    buf := make([]byte, 2*kb)
 
     for {
         // read a chunk
@@ -37,7 +40,7 @@ func read_chunk(fi io.Reader) {
 func main() {
     runtime.GOMAXPROCS(1)
     // open input file
-    fi, err := os.Open("array.bin")
+    fi, err := os.Open("input.bin")
     if err != nil {
         panic(err)
     }
