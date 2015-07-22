@@ -9,7 +9,7 @@ Change Log:
  
 * 20/07/2015: concompressor.go reimplemented using concurrency only for compressing and writing (reading concurrently from a file makes no difference as its limited by the reading capacity of the disk head). After some tests there is no difference in the times used to read a file in chunks concurrently or serially. 
 
-22/07/2015: concompressor.go snappy compression introduced using pure Go golang/snappy library. Results:
+* 22/07/2015: concompressor.go snappy compression introduced using pure Go golang/snappy library. Results:
 
 Test A: compress the file
 
