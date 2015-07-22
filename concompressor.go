@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"github.com/golang/snappy/snappy"
 )
 
 // number of goroutines
@@ -14,7 +15,7 @@ const n_goroutines = 4
 // channel for storing goroutines
 var routines_chan = make(chan bool, n_goroutines)
 
-func compress(chunk []byte, n int) []byte {
+func gzip_compress(chunk []byte, n int) []byte {
 	var buf bytes.Buffer
 	writer := gzip.NewWriter(&buf)
 	writer.Write(chunk[:n])
@@ -23,12 +24,27 @@ func compress(chunk []byte, n int) []byte {
 	return buf.Bytes()
 }
 
-func write_chunk(buffer []byte, n int, fo io.Writer) {
+func snappy_compress(chunk []byte, n int) []byte {
+	var buf bytes.Buffer
+	writer := snappy.NewWriter(&buf)
+	writer.Write(chunk[:n])
+
+	return buf.Bytes()
+}
+
+func write_chunk(buffer []byte, n int, fo io.Writer, mode string) {
 
 	// write a chunk
-	if _, err := fo.Write(compress(buffer, n)); err != nil {
-		panic(err)
+	if mode == "snappy" {
+		if _, err := fo.Write(snappy_compress(buffer, n)); err != nil {
+			panic(err)
+		}
+	} else {
+		if _, err := fo.Write(gzip_compress(buffer, n)); err != nil {
+			panic(err)
+		}
 	}
+	
 
 	<-routines_chan
 
@@ -39,7 +55,7 @@ func main() {
 	runtime.GOMAXPROCS(4)
 
 	// open input file
-	fi, err := os.Open("input.min")
+	fi, err := os.Open("input.bin")
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +79,7 @@ func main() {
 	}()
 
 	// define block size
-	buf := make([]byte, 1024*1024)
+	buf := make([]byte, 512*1024)
 
 	for {
 		// read a chunk
@@ -75,7 +91,7 @@ func main() {
 			break
 		}
 		routines_chan <- true
-		go write_chunk(buf, n, fo)
+		go write_chunk(buf, n, fo, "snappy")
 	}
 
 	// Wait for them to finish
