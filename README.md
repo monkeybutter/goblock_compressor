@@ -39,8 +39,8 @@ Test B: compress np.save("input.bin", np.arange(1e8)) 376MB
 
 Test C: Difference between compressing the files:
 
-   a) np.save("input.bin", np.arange(1e8)) 376MB
-   b) np.save("input.bin", np.arange(3e8)) 1.1GB
+    a) np.save("input.bin", np.arange(1e8)) 376MB
+    b) np.save("input.bin", np.arange(3e8)) 1.1GB
 
         Buffer size = 256 kB
         goroutines (threads) = 4
