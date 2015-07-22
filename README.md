@@ -11,7 +11,9 @@ Change Log:
 
 22/07/2015: concompressor.go snappy compression introduced using pure Go golang/snappy library. Results:
 
-Test A: compress np.save("input.bin", np.arange(1e8)) 376MB
+Test A: compress the file
+
+    np.save("input.bin", np.arange(1e8)) 376MB
 
         goroutines (threads) = 4
 
@@ -26,8 +28,10 @@ Test A: compress np.save("input.bin", np.arange(1e8)) 376MB
 
 No significant improvement achieved for chunks bigger than 256 kB
 
-Test B: compress np.save("input.bin", np.arange(1e8)) 376MB
-         
+Test B: compress the file:
+
+    np.save("input.bin", np.arange(1e8)) 376MB
+ 
         Buffer size = 256 kB
 
 | Goroutines      | Time s  |
