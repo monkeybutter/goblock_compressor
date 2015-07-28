@@ -3,10 +3,10 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"github.com/golang/snappy/snappy"
 	"io"
 	"os"
 	"runtime"
-	"github.com/golang/snappy/snappy"
 )
 
 // number of goroutines
@@ -32,10 +32,10 @@ func snappy_compress(chunk []byte, n int) []byte {
 	return buf.Bytes()
 }
 
-func write_chunk(buffer []byte, n int, fo io.Writer, mode string) {
+func write_chunk(buffer []byte, n int, fo io.Writer, compressor string) {
 
 	// write a chunk
-	if mode == "snappy" {
+	if compressor == "snappy" {
 		if _, err := fo.Write(snappy_compress(buffer, n)); err != nil {
 			panic(err)
 		}
@@ -44,7 +44,6 @@ func write_chunk(buffer []byte, n int, fo io.Writer, mode string) {
 			panic(err)
 		}
 	}
-	
 
 	<-routines_chan
 
@@ -55,7 +54,7 @@ func main() {
 	runtime.GOMAXPROCS(4)
 
 	// open input file
-	fi, err := os.Open("input.bin")
+	fi, err := os.Open("input.txt")
 	if err != nil {
 		panic(err)
 	}
