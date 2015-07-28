@@ -1,22 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"github.com/golang/snappy"
 	"io"
 	"os"
-	"bytes"
-	"github.com/golang/snappy/snappy"
 )
 
 const kB = 1024
 
-type block struct {
-	n   int
-	buf []byte
-}
-
-func block_generator(filePath string, block_size int) <-chan block {
-
-	out := make(chan block, 4)
+func block_generator(filePath string, block_size int) <-chan []byte {
+	out := make(chan []byte)
 
 	go func() {
 
@@ -49,7 +43,9 @@ func block_generator(filePath string, block_size int) <-chan block {
 				break
 			}
 
-			out <- block{n, buf[:n]}
+			bufc := make([]byte, n)
+			copy(bufc, buf[:n])
+			out <- bufc
 
 		}
 		close(out)
@@ -60,32 +56,32 @@ func block_generator(filePath string, block_size int) <-chan block {
 
 func _shuffle_part_n(chunk, part []byte, n, size int) {
 
-        for i:=0; i<len(part); i++ {
-              part[i] = chunk[i*size+n]
-        }
+	for i := 0; i < len(part); i++ {
+		part[i] = chunk[i*size+n]
+	}
 }
 
-func block_shuffler(in <-chan block, block_size, size int) <-chan block {
+func block_shuffler(in <-chan []byte, block_size, size int) <-chan []byte {
 
-	out := make(chan block)
+	out := make(chan []byte)
 
 	go func() {
-		
-		for ablock := range in {
 
-			if ablock.n == block_size {
-				
-				shuffled_buf := make([]byte, ablock.n)
+		for block := range in {
 
-				for i:=0; i<ablock.n/size; i++ {	
-					part := shuffled_buf[size*i:size*(i+1)]
-					_shuffle_part_n(ablock.buf, part, i, size)
-	        	}
+			if len(block) == block_size {
 
-	        	out <- block{ablock.n, shuffled_buf}
-	        	
+				shuffled_buf := make([]byte, block_size)
+
+				for i := 0; i < block_size/size; i++ {
+					part := shuffled_buf[size*i : size*(i+1)]
+					_shuffle_part_n(block, part, i, size)
+				}
+
+				out <- shuffled_buf
+
 			} else {
-				out <- ablock
+				out <- block
 			}
 		}
 
@@ -95,24 +91,24 @@ func block_shuffler(in <-chan block, block_size, size int) <-chan block {
 	return out
 }
 
-func block_compressor(in <-chan block, block_size int) <-chan block {
+func block_compressor(in <-chan []byte, block_size int) <-chan []byte {
 
-	out := make(chan block)
+	out := make(chan []byte)
 
 	go func() {
 
 		var buf bytes.Buffer
-		
-		for ablock := range in {
 
-			if ablock.n == block_size {
+		for block := range in {
+
+			if len(block) == block_size {
 				buf.Reset()
 				writer := snappy.NewWriter(&buf)
-				writer.Write(ablock.buf[:ablock.n])
+				writer.Write(block)
 
-				out <- block{len(buf.Bytes()), buf.Bytes()}
+				out <- buf.Bytes()
 			} else {
-				out <- ablock
+				out <- block
 			}
 		}
 
@@ -122,7 +118,7 @@ func block_compressor(in <-chan block, block_size int) <-chan block {
 	return out
 }
 
-func block_writer(in <-chan block, filePath string) bool {
+func block_writer(in <-chan []byte, filePath string) bool {
 
 	// open output file
 	file, err := os.Create(filePath)
@@ -137,42 +133,41 @@ func block_writer(in <-chan block, filePath string) bool {
 	}()
 
 	for block := range in {
-		file.Write(block.buf[:block.n])
+		file.Write(block)
 	}
 
 	return true
 }
 
 func main() {
-	block_size := 16*kB
-
+	block_size := 512 * kB
+	/*
 	// nothing
 	block_writer(
-		block_generator("input.txt", block_size),
-	"output0.txt")
+		block_generator("output.bin", block_size),
+		"output0.txt")
 
 	// shuffling
 	block_writer(
 		block_shuffler(
-			block_generator("input.txt", block_size),
-		block_size, 4), 
-	"output1.txt")
+			block_generator("output.bin", block_size),
+			block_size, 4),
+		"output1.txt")
 
 	// compression
 	block_writer(
 		block_compressor(
-			block_generator("input.txt", block_size),
-		block_size), 
-	"output2.txt")
-
+			block_generator("output.bin", block_size),
+			block_size),
+		"output2.txt")
+	*/
 	// shuffling + compression
 	block_writer(
 		block_compressor(
 			block_shuffler(
-				block_generator("input.txt", block_size),
-			block_size, 4), 
-		block_size), 
-	"output3.txt")
-
+				block_generator("output.bin", block_size),
+				block_size, 4),
+			block_size),
+		"output3.txt")
 
 }
