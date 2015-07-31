@@ -205,13 +205,13 @@ func block_writer(in DuplexPipe, filePath string) bool {
 
 func main() {
 	runtime.GOMAXPROCS(4)
-	block_size := 512*kB
+	block_size := 256*kB
 
 	// read & write
 	//block_writer(block_generator("input.bin", block_size), "output.bin")
 	// read compress write
-	//block_writer(block_compressor(block_generator("input.bin", block_size, 4), block_size, 4), "output.bin")
+	//block_writer(block_compressor(block_generator("npy5e8.bin", block_size, 4), block_size, 4), "output.bin")
 	// read shuffle compress write
-	block_writer(block_compressor(block_shuffler(block_generator("input.bin", block_size, 4), block_size, 4, 4), block_size, 4), "output.bin")
+	block_writer(block_compressor(block_shuffler(block_generator("npy5e8.bin", block_size, 4), block_size, 4, 4), block_size, 4), "output2.bin")
 
 }
