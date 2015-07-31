@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"github.com/golang/snappy/snappy"
+	"github.com/golang/snappy"
 	"io"
 	"os"
 	"runtime"
@@ -51,10 +51,10 @@ func write_chunk(buffer []byte, n int, fo io.Writer, compressor string) {
 
 func main() {
 
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(1)
 
 	// open input file
-	fi, err := os.Open("input.txt")
+	fi, err := os.Open("input.bin")
 	if err != nil {
 		panic(err)
 	}
