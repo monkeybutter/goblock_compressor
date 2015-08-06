@@ -13,6 +13,8 @@ Change Log:
 
 * 31/07/2015: conc_comp_pipeline alpha version of a concurrent pipeline model is introduced with high modularity and functional style execution. Concurrency level can be defined as parameters of the different pipe functions.
 
+* 06/08/2015: conc_comp_pipeline has been modified to accept command line arguments to specify the number of processors, block size and input file.
+
 Test A: compress the file
 
     np.save("npy1e8.bin", np.arange(1e8)) 763MB
