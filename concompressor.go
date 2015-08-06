@@ -54,7 +54,7 @@ func main() {
 	runtime.GOMAXPROCS(1)
 
 	// open input file
-	fi, err := os.Open("input.bin")
+	fi, err := os.Open("npy1e7.bin")
 	if err != nil {
 		panic(err)
 	}

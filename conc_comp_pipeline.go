@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/golang/snappy"
 	"io"
 	"os"
-	"runtime"
-	"github.com/golang/snappy"
+	"strconv"
 )
 
 const kB = 1024
@@ -16,13 +16,13 @@ type Block struct {
 
 type DuplexPipe struct {
 	Downstream chan Block
-	Upstream chan Block
+	Upstream   chan Block
 }
 
 func block_generator(filePath string, block_size, conc_level int) DuplexPipe {
 
 	// This is the output of the generator
-	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)} 
+	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)}
 	// Block ready to hold reading
 	for i := 0; i < conc_level; i++ {
 		out.Upstream <- Block{make([]byte, block_size), 0}
@@ -45,7 +45,7 @@ func block_generator(filePath string, block_size, conc_level int) DuplexPipe {
 		var buf Block
 
 		for {
-			buf = <- out.Upstream
+			buf = <-out.Upstream
 
 			// read a block
 			n, err := file.Read(buf.Buf)
@@ -70,13 +70,12 @@ func block_generator(filePath string, block_size, conc_level int) DuplexPipe {
 
 func shuffle_part_n(chunk, part []byte, n, type_size int) {
 
-        
 }
 
 func block_shuffler(in DuplexPipe, block_size, type_size, conc_level int) DuplexPipe {
 
 	// This is the output of the generator
-	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)} 
+	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)}
 	// Block ready to hold reading
 	for i := 0; i < conc_level; i++ {
 		out.Upstream <- Block{make([]byte, block_size), 0}
@@ -84,38 +83,37 @@ func block_shuffler(in DuplexPipe, block_size, type_size, conc_level int) Duplex
 
 	var shuff_buf Block
 
-	go func() {	
+	go func() {
 
 		done := make(chan bool, conc_level)
 
 		for block := range in.Downstream {
-			shuff_buf = <- out.Upstream
+			shuff_buf = <-out.Upstream
 			done <- false
 
-			go func() {	
-	
+			go func() {
+
 				if block.N == block_size {
 
-					for i:=0; i<block_size/type_size; i++ {
-						part := shuff_buf.Buf[type_size*i:type_size*(i+1)]
+					for i := 0; i < block_size/type_size; i++ {
+						part := shuff_buf.Buf[type_size*i : type_size*(i+1)]
 
-						for j:=0; j<len(part); j++ {
-						      part[j] = block.Buf[j*type_size+i]
+						for j := 0; j < len(part); j++ {
+							part[j] = block.Buf[j*type_size+i]
 						}
-			        }
+					}
 
 					shuff_buf.N = block.N
 
-					
 				} else {
 					shuff_buf.N = block.N
 					copy(shuff_buf.Buf[:shuff_buf.N], block.Buf)
 				}
 
 				in.Upstream <- block
-				out.Downstream <- shuff_buf	
+				out.Downstream <- shuff_buf
 
-				<- done 	
+				<-done
 			}()
 		}
 		// Wait for them to finish
@@ -131,44 +129,44 @@ func block_shuffler(in DuplexPipe, block_size, type_size, conc_level int) Duplex
 func block_compressor(in DuplexPipe, block_size, conc_level int) DuplexPipe {
 
 	// This is the output of the generator
-	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)} 
+	out := DuplexPipe{make(chan Block, conc_level), make(chan Block, conc_level)}
 	// Block ready to hold reading
+	comp_len := snappy.MaxEncodedLen(block_size)
 	for i := 0; i < conc_level; i++ {
-		out.Upstream <- Block{make([]byte, block_size), 0}
+		out.Upstream <- Block{make([]byte, comp_len), 0}
 	}
 
 	var comp_buf Block
 
-	go func() {	
+	go func() {
 
 		done := make(chan bool, conc_level)
 
 		for block := range in.Downstream {
-			comp_buf = <- out.Upstream
+			comp_buf = <-out.Upstream
 			done <- false
 
-			go func() {	
-	
+			go func() {
+
 				if block.N == block_size {
 
 					// We are allocating comp_chunk extra here to know length
-					// ! Fork snappy to return len(comp_buf.Buf) instead of 
+					// ! Fork snappy to return len(comp_buf.Buf) instead of
 					// the the actual slice of comp_buf.Buf
 					comp_chunk := snappy.Encode(comp_buf.Buf, block.Buf)
-					
+
 					// this misses the point of having reusable slices... :-(
 					comp_buf.N = len(comp_chunk)
 
-					
 				} else {
 					comp_buf.N = block.N
 					copy(comp_buf.Buf[:comp_buf.N], block.Buf)
 				}
 
 				in.Upstream <- block
-				out.Downstream <- comp_buf	
+				out.Downstream <- comp_buf
 
-				<- done 	
+				<-done
 			}()
 		}
 		// Wait for them to finish
@@ -204,14 +202,26 @@ func block_writer(in DuplexPipe, filePath string) bool {
 }
 
 func main() {
-	runtime.GOMAXPROCS(4)
-	block_size := 256*kB
+	// First argument runtime.GOMAXPROCS(4)
+	// Second argument block_size := 256*kB
+	// Usage: GOMAXPROCS=[num_procs] ./conc_comp_pipeline [input_file] [block_size kB]
+	// Example: GOMAXPROCS=2 ./conc_comp_pipeline input.bin 256
+
+	block_size, _ := strconv.Atoi(os.Args[2])
+	block_size = block_size * kB
 
 	// read & write
-	//block_writer(block_generator("input.bin", block_size), "output.bin")
+	//block_writer(block_generator("npy5e8.bin", block_size, 4), "output.bin")
 	// read compress write
 	//block_writer(block_compressor(block_generator("npy5e8.bin", block_size, 4), block_size, 4), "output.bin")
 	// read shuffle compress write
-	block_writer(block_compressor(block_shuffler(block_generator("npy5e8.bin", block_size, 4), block_size, 4, 4), block_size, 4), "output2.bin")
+
+	block_writer(
+		block_compressor(
+			block_shuffler(
+				block_generator(os.Args[1], block_size, 4),
+				block_size, 4, 4),
+			block_size, 4),
+		"output.bin")
 
 }
