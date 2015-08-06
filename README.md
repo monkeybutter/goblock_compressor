@@ -19,7 +19,7 @@ Test A: compress the file
 
         goroutines (threads) = 4
 
-| Buffer Size  kB | Time s  |
+| Block  Size  kB | Time s  |
 | --------------- | -------:|
 | 1               | 8.20    |
 | 8               | 2.95    |
@@ -33,7 +33,7 @@ Test B: compress the file:
 
     np.save("input.bin", np.arange(1e8)) 763MB
  
-        Buffer size = 256 kB
+        Block size = 256 kB
 
 | Goroutines      | Time s  |
 | --------------- | -------:|
@@ -46,7 +46,7 @@ Test B: shuffle and compress the file:
 
     np.save("input.bin", np.arange(1e8)) 763MB
  
-        Buffer size = 256 kB
+        Block size = 256 kB
 
 | Goroutines      | Time s  |
 | --------------- | -------:|
@@ -61,7 +61,7 @@ Test C: Difference between compressing the files:
     a) np.save("input.bin", np.arange(1e8)) 763MB
     b) np.save("input.bin", np.arange(5e8)) 3.7GB
 
-        Buffer size = 256 kB
+        Block size = 256 kB
         goroutines (threads) = 4
 
 | File      | Time s  | Snappy Comp Rate %  |
