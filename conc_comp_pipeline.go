@@ -68,10 +68,6 @@ func block_generator(filePath string, block_size, conc_level int) DuplexPipe {
 	return out
 }
 
-func shuffle_part_n(chunk, part []byte, n, type_size int) {
-
-}
-
 func block_shuffler(in DuplexPipe, block_size, type_size, conc_level int) DuplexPipe {
 
 	// This is the output of the generator
@@ -204,11 +200,14 @@ func block_writer(in DuplexPipe, filePath string) bool {
 func main() {
 	// First argument runtime.GOMAXPROCS(4)
 	// Second argument block_size := 256*kB
-	// Usage: GOMAXPROCS=[num_procs] ./conc_comp_pipeline [input_file] [block_size kB]
-	// Example: GOMAXPROCS=2 ./conc_comp_pipeline input.bin 256
+	// Third argument type size := 8 
+	// Usage: GOMAXPROCS=[num_procs] ./conc_comp_pipeline [input_file] [block_size kB] [type_size bytes]
+	// Example: GOMAXPROCS=2 ./conc_comp_pipeline input.bin 256 8
 
 	block_size, _ := strconv.Atoi(os.Args[2])
 	block_size = block_size * kB
+	
+        type_size, _ := strconv.Atoi(os.Args[3])
 
 	// read & write
 	//block_writer(block_generator("npy5e8.bin", block_size, 4), "output.bin")
@@ -220,8 +219,8 @@ func main() {
 		block_compressor(
 			block_shuffler(
 				block_generator(os.Args[1], block_size, 4),
-				block_size, 4, 4),
-			block_size, 4),
-		"output.bin")
+			block_size, type_size, 4),
+		block_size, 4),
+	"output.bin")
 
 }
