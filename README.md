@@ -15,6 +15,8 @@ Change Log:
 
 * 06/08/2015: conc_comp_pipeline has been modified to accept command line arguments to specify the number of processors, block size and input file.
 
+* 12/08/2015: conc_comp_pipeline has been modified to include type size as a parameter.
+
 Test A: compress the file
 
     np.save("npy1e8.bin", np.arange(1e8)) 763MB
