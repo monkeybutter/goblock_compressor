@@ -3,7 +3,7 @@ Go block compression tests
 
 Change Log:
 
-* 17/07/2015: concompressor.go first approach to a concurrent concurrent block compressor using Go.
+* 17/07/2015: concompressor.go first approach to a concurrent block compressor using Go.
 
 * 19/07/2015: concread.go program to test the effect of reading a file concurrently. To test times memory cache has to be deleted every time (use 'sudo purge' in macosx).
  
@@ -16,6 +16,8 @@ Change Log:
 * 06/08/2015: conc_comp_pipeline has been modified to accept command line arguments to specify the number of processors, block size and input file.
 
 * 12/08/2015: conc_comp_pipeline has been modified to include type size as a parameter.
+
+* 20/08/2015: blocker_simple simplified version of the block compressor with a significant improvement in performance.
 
 Test A: compress the file
 
