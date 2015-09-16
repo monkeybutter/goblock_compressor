@@ -19,6 +19,8 @@ Change Log:
 
 * 20/08/2015: blocker_simple simplified version of the block compressor with a significant improvement in performance.
 
+* 08/09/2015: blocker_simple_dumb most simple version of the block compressor which relies on the GC to clean allocations. Not as efficient as the previous version that makes use of the DuplexChannel but could be useful to understand the basics.
+
 Test A: compress the file
 
     np.save("npy1e8.bin", np.arange(1e8)) 763MB
