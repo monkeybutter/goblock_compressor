@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/gob"
+	"encoding/binary"
+	"fmt"
 	"github.com/golang/snappy"
 	"io"
 	"os"
@@ -18,15 +20,9 @@ type Block struct {
 }
 
 type Offset struct {
-	Start int
-	Size  int
+	Start uint32
+	Size  uint32
 }
-
-/*
-type DuplexPipe struct {
-	Downstream chan *Block
-	Upstream   chan *Block
-}*/
 
 func block_generator(filePath string, block_size, conc_level int) chan *Block {
 
@@ -164,10 +160,30 @@ func block_processor(in chan *Block, block_size, conc_level int) chan *Block {
 	return out
 }
 
-func block_writer(in chan *Block, filePath string) bool {
+func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
+
+	fi, err := os.Open(inFilePath)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		if err := fi.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	stat, err := fi.Stat()
+	if err != nil {
+	  // Could not obtain stat, handle error
+	}
+
+	nBlocks := (stat.Size()/(256*kB)) + 1
+	fmt.Println(nBlocks)
 
 	// open descriptor file
-	desc, err := os.Create(filePath + ".gob")
+	desc, err := os.Create(outFilePath + ".gob")
 	if err != nil {
 		panic(err)
 	}
@@ -179,7 +195,7 @@ func block_writer(in chan *Block, filePath string) bool {
 	}()
 
 	// open output file
-	file, err := os.Create(filePath)
+	file, err := os.Create(outFilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -190,13 +206,43 @@ func block_writer(in chan *Block, filePath string) bool {
 		}
 	}()
 
+	//Write First part of Header (vBlosc, vCompressor, flags, typeSize)
+	file.Write([]byte{1, 1, 65, 64, 0, 0, 0, 0})
+
+	//Write First part of Header (nbytes, blocksize, ctbytes)
+	bs := make([]byte, 4)
+    binary.LittleEndian.PutUint32(bs, 0)
+	file.Write(bs)
+	binary.LittleEndian.PutUint32(bs, 256)
+	file.Write(bs)
+	binary.LittleEndian.PutUint32(bs, 0)
+	file.Write(bs)
+
+	//Reserve space for offsets
+	offsets2 := make([]byte, 4*nBlocks)
+	file.Write(offsets2)
+
 	offsets := make(map[int]Offset)
 
+	var start uint32 = 0
 	i := 0
 	for block := range in {
 		file.Write(block.Buf[:block.NBytes])
-		offsets[block.BlockID] = Offset{i, block.NBytes}
-		i += block.NBytes
+		offsets[block.BlockID] = Offset{start, uint32(block.NBytes)}
+		binary.LittleEndian.PutUint32(offsets2[i:i+4], start)
+		//fmt.Println(start, offsets2[i:i+4], binary.BigEndian.Uint32(offsets2[i:i+4]))
+		start += uint32(block.NBytes)
+		i += 4
+	}
+
+	file.Seek(20, 0)
+	file.Write(offsets2)
+
+	file.Seek(0, 0)
+	number := make([]byte, 4)
+	for i:=0; i<20; i++ {
+		file.Read(number)
+		fmt.Println(binary.LittleEndian.Uint32(number))
 	}
 
 	dataEncoder := gob.NewEncoder(desc)
@@ -211,6 +257,6 @@ func main() {
 
 	type_size, _ := strconv.Atoi(os.Args[3])
 
-	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 4), block_size, type_size, 4), block_size, 4), "output.bin")
+	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 4), block_size, type_size, 4), block_size, 4), os.Args[1], "output.bin")
 
 }
