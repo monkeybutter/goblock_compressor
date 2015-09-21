@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/gob"
 	"encoding/binary"
-	"fmt"
 	"github.com/golang/snappy"
 	"io"
 	"os"
@@ -17,11 +15,6 @@ type Block struct {
 	Buf     []byte
 	NBytes  int
 	BlockID int
-}
-
-type Offset struct {
-	Start uint32
-	Size  uint32
 }
 
 func block_generator(filePath string, block_size, conc_level int) chan *Block {
@@ -180,7 +173,6 @@ func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
 	}
 
 	nBlocks := (stat.Size()/(256*kB)) + 1
-	fmt.Println(nBlocks)
 
 	// open descriptor file
 	desc, err := os.Create(outFilePath + ".gob")
@@ -211,7 +203,7 @@ func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
 
 	//Write First part of Header (nbytes, blocksize, ctbytes)
 	bs := make([]byte, 4)
-    binary.LittleEndian.PutUint32(bs, 0)
+	binary.LittleEndian.PutUint32(bs, uint32(stat.Size()))
 	file.Write(bs)
 	binary.LittleEndian.PutUint32(bs, 256)
 	file.Write(bs)
@@ -219,34 +211,23 @@ func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
 	file.Write(bs)
 
 	//Reserve space for offsets
-	offsets2 := make([]byte, 4*nBlocks)
-	file.Write(offsets2)
-
-	offsets := make(map[int]Offset)
+	offsets := make([]byte, 8*nBlocks)
+	//Write offsets
+	file.Write(offsets)
 
 	var start uint32 = 0
-	i := 0
+
 	for block := range in {
 		file.Write(block.Buf[:block.NBytes])
-		offsets[block.BlockID] = Offset{start, uint32(block.NBytes)}
-		binary.LittleEndian.PutUint32(offsets2[i:i+4], start)
-		//fmt.Println(start, offsets2[i:i+4], binary.BigEndian.Uint32(offsets2[i:i+4]))
+		//Start Offset
+		binary.LittleEndian.PutUint32(offsets[block.BlockID*8:(block.BlockID*8)+4], start+20)
+		//Size of block
+		binary.LittleEndian.PutUint32(offsets[(block.BlockID*8)+4:(block.BlockID*8)+8], uint32(block.NBytes))
 		start += uint32(block.NBytes)
-		i += 4
 	}
 
 	file.Seek(20, 0)
-	file.Write(offsets2)
-
-	file.Seek(0, 0)
-	number := make([]byte, 4)
-	for i:=0; i<20; i++ {
-		file.Read(number)
-		fmt.Println(binary.LittleEndian.Uint32(number))
-	}
-
-	dataEncoder := gob.NewEncoder(desc)
-	dataEncoder.Encode(offsets)
+	file.Write(offsets)
 
 	return true
 }
@@ -257,6 +238,6 @@ func main() {
 
 	type_size, _ := strconv.Atoi(os.Args[3])
 
-	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 4), block_size, type_size, 4), block_size, 4), os.Args[1], "output.bin")
+	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 1), block_size, type_size, 1), block_size, 1), os.Args[1], "output.bin")
 
 }
