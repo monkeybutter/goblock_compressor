@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/gob"
-	"github.com/golang/snappy"
+	"encoding/binary"
+	"./snappy"
 	"io"
 	"os"
 	"strconv"
@@ -15,11 +15,6 @@ type Block struct {
 	Buf     []byte
 	NBytes  int
 	BlockID int
-}
-
-type Offset struct {
-	Start int
-	Size  int
 }
 
 type DuplexPipe struct {
@@ -142,11 +137,11 @@ func comp(comp_buf, block *Block, in, out DuplexPipe, block_size int, wg *sync.W
 		// We are allocating comp_chunk extra here to know length
 		// ! Fork snappy to return len(comp_buf.Buf) instead of
 		// the the actual slice of comp_buf.Buf
-		comp_chunk := snappy.Encode(comp_buf.Buf, block.Buf)
+		_, comp_buf.NBytes = snappy.Encode(comp_buf.Buf, block.Buf)
 		//fmt.Println("Compressing block", block.BlockID, block_size, len(comp_chunk))
 
 		// this misses the point of having reusable slices... :-(
-		comp_buf.NBytes = len(comp_chunk)
+		//comp_buf.NBytes = len(comp_chunk)
 		comp_buf.BlockID = block.BlockID
 
 	} else {
@@ -184,44 +179,71 @@ func block_processor(in DuplexPipe, block_size, conc_level int) DuplexPipe {
 	return out
 }
 
-func block_writer(in DuplexPipe, filePath string) bool {
+func block_writer(in DuplexPipe, inFilePath, outFilePath string) bool {
 
-	// open descriptor file
-	desc, err := os.Create(filePath + ".gob")
+	// open input file
+	fi, err := os.Open(inFilePath)
 	if err != nil {
 		panic(err)
 	}
 
 	defer func() {
-		if err := desc.Close(); err != nil {
+		if err := fi.Close(); err != nil {
 			panic(err)
 		}
 	}()
+
+	stat, err := fi.Stat()
+	if err != nil {
+	  // Could not obtain stat, handle error
+	}
+
+	nBlocks := (stat.Size()/(256*kB)) + 1
 
 	// open output file
-	file, err := os.Create(filePath)
+	fo, err := os.Create(outFilePath)
 	if err != nil {
 		panic(err)
 	}
 
 	defer func() {
-		if err := file.Close(); err != nil {
+		if err := fo.Close(); err != nil {
 			panic(err)
 		}
 	}()
 
-	offsets := make(map[int]Offset)
+	//Write First part of Header (vBlosc, vCompressor, flags, typeSize)
+	fo.Write([]byte{1, 1, 65, 64, 0, 0, 0, 0})
 
-	i := 0
+	//Write First part of Header (nbytes, blocksize, ctbytes)
+	bs := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bs, uint32(stat.Size()))
+	fo.Write(bs)
+	binary.LittleEndian.PutUint32(bs, 256)
+	fo.Write(bs)
+	binary.LittleEndian.PutUint32(bs, 0)
+	fo.Write(bs)
+
+	//Reserve space for offsets
+	offsets := make([]byte, 8*nBlocks)
+	//Write offsets
+	fo.Write(offsets)
+
+	var start uint32 = 20+uint32(8*nBlocks)
+
 	for block := range in.Downstream {
-		file.Write(block.Buf[:block.NBytes])
-		offsets[block.BlockID] = Offset{i, block.NBytes}
-		i += block.NBytes
+		fo.Write(block.Buf[:block.NBytes])
+		//Start Offset
+		binary.LittleEndian.PutUint32(offsets[block.BlockID*8:(block.BlockID*8)+4], start)
+		//Size of block
+		binary.LittleEndian.PutUint32(offsets[(block.BlockID*8)+4:(block.BlockID*8)+8], uint32(block.NBytes))
+		start += uint32(block.NBytes)
+
 		in.Upstream <- block
 	}
 
-	dataEncoder := gob.NewEncoder(desc)
-	dataEncoder.Encode(offsets)
+	fo.Seek(20, 0)
+	fo.Write(offsets)
 
 	return true
 }
@@ -233,12 +255,14 @@ func main() {
 
 	type_size, _ := strconv.Atoi(os.Args[3])
 
+	conc_level, _ := strconv.Atoi(os.Args[4])
+
 	block_writer(
 		block_processor(
 			block_shuffler(
-				block_generator(os.Args[1], block_size, 4),
-				block_size, type_size, 4),
-			block_size, 4),
-		"output.bin")
+				block_generator(os.Args[1], block_size, conc_level),
+				block_size, type_size, conc_level),
+			block_size, conc_level),
+		os.Args[1], "output.bin")
 
 }

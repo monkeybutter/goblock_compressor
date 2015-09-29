@@ -14,7 +14,7 @@ type Block struct {
 	BlockID int
 }
 
-func block_reader(filePath string, block_size, conc_level int) chan *Block {
+func block_reader(filePath string, conc_level int) chan *Block {
 
 	// This is the output of the generator
 	out := make(chan *Block, conc_level)
@@ -55,60 +55,68 @@ func block_reader(filePath string, block_size, conc_level int) chan *Block {
 		dataFile.Seek(20, 0)
 		dataFile.Read(offsets)
 
-		dbuf := make([]byte, block_size)
 
 		for i := uint32(0); i<nBlocks; i++ {
 
 			start := binary.LittleEndian.Uint32(offsets[i*8:(i*8)+4])
 			size := binary.LittleEndian.Uint32(offsets[i*8+4:(i*8)+8])
-			buf := &Block{make([]byte, size), 0, 0}
+			buf := &Block{make([]byte, size), size, 0}
 
-			block := make([]byte, size)
 			dataFile.Seek(int64(start), 0)
-			dataFile.Read(block)
-			d, _ := snappy.Decode(dbuf, block[:])
-
-			bufo := make([]byte, len(d))
-
-			for j := 0; j < type_size; j++ {
-				for k := 0; k < int(block_size)/64; k++ {
-					bufo[k*type_size+j] = d[k+(j*int(block_size)/type_size)]
-				}
-			}
-
-			outFile.Write(bufo)
-		}
-
-		start := binary.LittleEndian.Uint32(offsets[(nBlocks-1)*8:((nBlocks-1)*8)+4])
-		size := binary.LittleEndian.Uint32(offsets[(nBlocks-1)*8+4:((nBlocks-1)*8)+8])
-
-		block := make([]byte, size)
-		dataFile.Seek(int64(start), 0)
-		dataFile.Read(block)
-		outFile.Write(block)
-
-		for i := 0; ; i++ {
-			buf := &Block{make([]byte, block_size), 0, 0}
-
-			// create a block
-			n, err := file.Read(buf.Buf)
-			buf.NBytes = n
-			buf.BlockID = i
-
-			if err != nil && err != io.EOF {
-				panic(err)
-			}
-
-			if n == 0 {
-				break
-			}
-
+			dataFile.Read(buf.Buf)
 			out <- buf
-
 		}
 
 		close(out)
 
+	}()
+
+	return out
+}
+
+
+func block_decomp(in DuplexPipe, block_size, conc_level int) DuplexPipe {
+
+	// This is the output of the generator
+	out := DuplexPipe{make(chan *Block, conc_level), make(chan *Block, conc_level)}
+	comp_len := snappy.MaxEncodedLen(block_size)
+	for i := 0; i < conc_level; i++ {
+		out.Upstream <- &Block{make([]byte, comp_len), 0, 0}
+	}
+
+	var wg sync.WaitGroup
+
+	go func() {
+
+		for block := range in.Downstream {
+			wg.Add(1)
+			go comp(<-out.Upstream, block, in, out, block_size, &wg)
+		}
+
+		wg.Wait()
+		close(out.Downstream)
+	}()
+
+	return out
+}
+
+
+
+func block_unshuffler(in chan *Block, block_size, type_size, conc_level int) chan *Block {
+
+	out := make(chan *Block, conc_level)
+
+	var wg sync.WaitGroup
+
+	go func() {
+
+		for block := range in {
+			wg.Add(1)
+			go unshuff(block, out, block_size, type_size, &wg)
+		}
+
+		wg.Wait()
+		close(out)
 	}()
 
 	return out

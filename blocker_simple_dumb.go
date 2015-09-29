@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/binary"
-	"github.com/golang/snappy"
+	"./snappy"
 	"io"
 	"os"
 	"strconv"
@@ -120,8 +120,7 @@ func comp(block *Block, out chan *Block, block_size int, wg *sync.WaitGroup) {
 	comp_block := &Block{make([]byte, comp_len), 0, 0}
 
 	if block.NBytes == block_size {
-		comp_block.Buf = snappy.Encode(comp_block.Buf, block.Buf)
-		comp_block.NBytes = len(comp_block.Buf)
+		comp_block.Buf, comp_block.NBytes = snappy.Encode(comp_block.Buf, block.Buf)
 		comp_block.BlockID = block.BlockID
 
 	} else {
@@ -226,6 +225,6 @@ func main() {
 
 	type_size, _ := strconv.Atoi(os.Args[3])
 
-	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 1), block_size, type_size, 1), block_size, 1), os.Args[1], "output.bin")
+	block_writer(block_processor(block_shuffler(block_generator(os.Args[1], block_size, 4), block_size, type_size, 4), block_size, 4), os.Args[1], "output.bin")
 
 }
