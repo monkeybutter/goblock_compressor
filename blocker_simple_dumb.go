@@ -174,18 +174,6 @@ func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
 
 	nBlocks := (stat.Size()/(256*kB)) + 1
 
-	// open descriptor file
-	desc, err := os.Create(outFilePath + ".gob")
-	if err != nil {
-		panic(err)
-	}
-
-	defer func() {
-		if err := desc.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
 	// open output file
 	file, err := os.Create(outFilePath)
 	if err != nil {
@@ -215,12 +203,12 @@ func block_writer(in chan *Block, inFilePath, outFilePath string) bool {
 	//Write offsets
 	file.Write(offsets)
 
-	var start uint32 = 0
+	var start uint32 = 20+uint32(8*nBlocks)
 
 	for block := range in {
 		file.Write(block.Buf[:block.NBytes])
 		//Start Offset
-		binary.LittleEndian.PutUint32(offsets[block.BlockID*8:(block.BlockID*8)+4], start+20)
+		binary.LittleEndian.PutUint32(offsets[block.BlockID*8:(block.BlockID*8)+4], start)
 		//Size of block
 		binary.LittleEndian.PutUint32(offsets[(block.BlockID*8)+4:(block.BlockID*8)+8], uint32(block.NBytes))
 		start += uint32(block.NBytes)
