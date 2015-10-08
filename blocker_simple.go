@@ -1,7 +1,7 @@
-package main
+package blockcompressor
 
 import (
-	"./snappy"
+	"github.com/monkeybutter/snappy"
 	"encoding/binary"
 	"fmt"
 	"io"

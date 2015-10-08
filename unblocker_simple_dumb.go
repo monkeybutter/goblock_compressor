@@ -1,4 +1,4 @@
-package main
+package blockcompressor
 
 import (
 	"os"
