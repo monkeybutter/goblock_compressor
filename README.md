@@ -23,6 +23,8 @@ Change Log:
 
 * 02/10/2015: unblocker_simple version of a concurrent block decompressor which returns the original file from the one compressed with the blocker_simple program. Benchmarks were run on the Raspberry Pi 2. Some polishing has to be made to the functions to comply with Go style and making them more simple.
 
+* 09/10/2015: Changed structure of functions to blocker.go and filter.go. This gives it a package structure in the workspace. Own implementation of snappy has been moved out as a new separate package. Test suit has to be implemented to include input file creation, compression, decompression and cleaning.
+
 Test A: compress the file
 
     np.save("npy1e8.bin", np.arange(1e8)) 763MB
