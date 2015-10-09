@@ -2,8 +2,6 @@ package blockcompressor
 
 import (
 	"github.com/monkeybutter/snappy"
-	"encoding/binary"
-	"strconv"
 	"sync"
 )
 
