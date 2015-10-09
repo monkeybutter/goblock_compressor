@@ -1,4 +1,5 @@
-package blockcompressor
+package main
+//package blockcompressor
 
 import (
 	"encoding/binary"

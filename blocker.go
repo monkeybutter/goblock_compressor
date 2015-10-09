@@ -1,9 +1,7 @@
 package blockcompressor
 
 import (
-	"github.com/monkeybutter/snappy"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -27,6 +25,8 @@ type DuplexPipe struct {
 	ConcLevel  int
 }
 
+type filter func(outBlock, inBlock *Block, inDuplexPipe, outDuplexPipe DuplexPipe, wg *sync.WaitGroup)
+
 func blockGenerator(filePath string, blockSize, typeSize, concLevel int) (out DuplexPipe) {
 
 	fi, err := os.Open(filePath)
@@ -48,6 +48,7 @@ func blockGenerator(filePath string, blockSize, typeSize, concLevel int) (out Du
 
 	// This is the output of the generator
 	out = DuplexPipe{make(chan *Block, concLevel), make(chan *Block, concLevel), fileSize, blockSize, typeSize, concLevel}
+
 	// Block ready to hold reading
 	for i := 0; i < concLevel; i++ {
 		out.Upstream <- &Block{make([]byte, blockSize), 0, 0}
@@ -96,36 +97,7 @@ func blockGenerator(filePath string, blockSize, typeSize, concLevel int) (out Du
 	return
 }
 
-func shuff(shuff_buf, block *Block, in, out DuplexPipe, wg *sync.WaitGroup) {
-
-	defer wg.Done()
-
-	if block.NBytes == in.BlockSize {
-
-		shuff_unit := in.BlockSize / in.TypeSize
-
-		for i := 0; i < in.TypeSize; i++ {
-			shuff_offset := i * shuff_unit
-
-			for j := 0; j < shuff_unit; j++ {
-				shuff_buf.Buf[shuff_offset+j] = block.Buf[j*in.TypeSize+i]
-			}
-		}
-
-		shuff_buf.NBytes = block.NBytes
-		shuff_buf.BlockID = block.BlockID
-
-	} else {
-		shuff_buf.NBytes = block.NBytes
-		shuff_buf.BlockID = block.BlockID
-		copy(shuff_buf.Buf[:shuff_buf.NBytes], block.Buf)
-	}
-
-	in.Upstream <- block
-	out.Downstream <- shuff_buf
-}
-
-func blockShuffler(in DuplexPipe) (out DuplexPipe) {
+func blockProcessor(in DuplexPipe, proc filter) (out DuplexPipe) {
 
 	// This is the output of the generator
 	out = DuplexPipe{make(chan *Block, in.ConcLevel), make(chan *Block, in.ConcLevel), in.FileSize, in.BlockSize, in.TypeSize, in.ConcLevel}
@@ -140,7 +112,7 @@ func blockShuffler(in DuplexPipe) (out DuplexPipe) {
 
 		for block := range in.Downstream {
 			wg.Add(1)
-			go shuff(<-out.Upstream, block, in, out, &wg)
+			go proc(<-out.Upstream, block, in, out, &wg)
 		}
 
 		wg.Wait()
@@ -150,57 +122,6 @@ func blockShuffler(in DuplexPipe) (out DuplexPipe) {
 	return
 }
 
-func comp(comp_buf, block *Block, in, out DuplexPipe, wg *sync.WaitGroup) {
-
-	defer wg.Done()
-
-	if block.NBytes == in.BlockSize {
-
-		// We are allocating comp_chunk extra here to know length
-		// ! Fork snappy to return len(comp_buf.Buf) instead of
-		// the the actual slice of comp_buf.Buf
-		_, comp_buf.NBytes = snappy.Encode(comp_buf.Buf, block.Buf)
-		//fmt.Println("Compressing block", block.BlockID, block_size, len(comp_chunk))
-
-		// this misses the point of having reusable slices... :-(
-		//comp_buf.NBytes = len(comp_chunk)
-		comp_buf.BlockID = block.BlockID
-
-	} else {
-		comp_buf.NBytes = block.NBytes
-		comp_buf.BlockID = block.BlockID
-		copy(comp_buf.Buf[:comp_buf.NBytes], block.Buf)
-	}
-
-	in.Upstream <- block
-	out.Downstream <- comp_buf
-}
-
-func blockProcessor(in DuplexPipe) (out DuplexPipe) {
-
-	// This is the output of the generator
-	out = DuplexPipe{make(chan *Block, in.ConcLevel), make(chan *Block, in.ConcLevel), in.FileSize, in.BlockSize, in.TypeSize, in.ConcLevel}
-
-	comp_len := snappy.MaxEncodedLen(in.BlockSize)
-	for i := 0; i < in.ConcLevel; i++ {
-		out.Upstream <- &Block{make([]byte, comp_len), 0, 0}
-	}
-
-	var wg sync.WaitGroup
-
-	go func() {
-
-		for block := range in.Downstream {
-			wg.Add(1)
-			go comp(<-out.Upstream, block, in, out, &wg)
-		}
-
-		wg.Wait()
-		close(out.Downstream)
-	}()
-
-	return
-}
 
 func blockWriter(in DuplexPipe, outFilePath string) bool {
 
@@ -217,7 +138,6 @@ func blockWriter(in DuplexPipe, outFilePath string) bool {
 	}()
 
 	nBlocks := (in.FileSize / int64(in.BlockSize)) + 1
-	fmt.Println(nBlocks, in.BlockSize, in.FileSize)
 
 	//Write First part of Header (vBlosc, vCompressor, flags, typeSize)
 	fo.Write([]byte{1, 1, 65, 64, 0, 0, 0, 0})
@@ -226,7 +146,7 @@ func blockWriter(in DuplexPipe, outFilePath string) bool {
 	bs := make([]byte, 4)
 	binary.LittleEndian.PutUint32(bs, uint32(in.FileSize))
 	fo.Write(bs)
-	binary.LittleEndian.PutUint32(bs, 256)
+	binary.LittleEndian.PutUint32(bs, uint32(in.BlockSize))
 	fo.Write(bs)
 	binary.LittleEndian.PutUint32(bs, 0)
 	fo.Write(bs)
@@ -255,14 +175,101 @@ func blockWriter(in DuplexPipe, outFilePath string) bool {
 	return true
 }
 
-func main() {
+func unblockGenerator(filePath string, concLevel int) (out DuplexPipe) {
 
-	blockSize, _ := strconv.Atoi(os.Args[2])
-	blockSize = blockSize * kB
-	typeSize, _ := strconv.Atoi(os.Args[3])
-	concLevel, _ := strconv.Atoi(os.Args[4])
+	fi, err := os.Open(filePath)
 
-	readerBlocks := blockGenerator(os.Args[1], blockSize, typeSize, concLevel)
-	compressorBlocks := blockProcessor(blockShuffler(readerBlocks))
-	blockWriter(compressorBlocks, "output.bin")
+	if err != nil {
+		panic(err)
+	}
+
+	f32s := make([]byte, 4)
+
+	fi.Read(f32s)
+	typeSize := int(f32s[3])
+
+	fi.Seek(8, 0)
+	fi.Read(f32s)
+	fileSize := binary.LittleEndian.Uint32(f32s)
+
+	//fi.Seek(12, 0)
+	fi.Read(f32s)
+	blockSize := binary.LittleEndian.Uint32(f32s)
+
+	nBlocks := (fileSize / blockSize) + 1
+
+	offsets := make([]byte, nBlocks*8)
+	fi.Seek(20, 0)
+	fi.Read(offsets)
+
+	if err := fi.Close(); err != nil {
+		panic(err)
+	}
+
+	// This is the output of the generator
+	out = DuplexPipe{make(chan *Block, concLevel), make(chan *Block, concLevel), int64(fileSize), int(blockSize), typeSize, concLevel}
+	// Block ready to hold reading
+	for i := 0; i < concLevel; i++ {
+		out.Upstream <- &Block{make([]byte, blockSize), 0, 0}
+	}
+
+	go func() {
+
+		dataFile, err := os.Open(filePath)
+
+		if err != nil {
+			panic(err)
+		}
+
+		defer func() {
+			if err := dataFile.Close(); err != nil {
+				panic(err)
+			}
+		}()
+
+		var buf *Block
+
+		for i := uint32(0); i < nBlocks; i++ {
+			buf = <-out.Upstream
+
+			start := binary.LittleEndian.Uint32(offsets[i*8 : (i*8)+4])
+			size := binary.LittleEndian.Uint32(offsets[i*8+4 : (i*8)+8])
+			buf.NBytes = int(size)
+			buf.BlockID = int(i)
+
+			dataFile.Seek(int64(start), 0)
+			dataFile.Read(buf.Buf[:size])
+
+			out.Downstream <- buf
+		}
+
+		close(out.Downstream)
+
+	}()
+
+	return out
+}
+
+func unblockWriter(in DuplexPipe, outFilePath string) bool {
+
+	// open output file
+	fo, err := os.Create(outFilePath)
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		if err := fo.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	for block := range in.Downstream {
+		fo.Seek(int64(block.BlockID*in.BlockSize), 0)
+		fo.Write(block.Buf[:block.NBytes])
+
+		in.Upstream <- block
+	}
+
+	return true
 }
