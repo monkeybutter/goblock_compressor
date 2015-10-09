@@ -2,7 +2,6 @@ package blockcompressor
 
 import (
 	"testing"
-	"fmt"
 	"encoding/binary"
 	"math"
 	"os"
@@ -46,12 +45,12 @@ func BenchmarkBlockUnblock(b *testing.B) {
 	err := os.Remove("input.bin")
 
       	if err != nil {
-         	 fmt.Println("Error deleteing input.bin", err)
+         	 panic(err)
       	}
 
 	err = os.Remove("output.bin")
 
       	if err != nil {
-         	 fmt.Println("Error deleteing output.bin", err)
+         	 panic(err)
       	}
 }
