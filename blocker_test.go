@@ -32,7 +32,7 @@ func create_float64_file(size int, filename string) {
 	}
 }
 
-func BenchmarkBlockUnblock(b *testing.B) {
+func BenchmarkBlock(b *testing.B) {
 	create_float64_file(1000000, "input.bin")
     	b.ResetTimer()
      	for n := 0; n < b.N; n++ {
@@ -41,16 +41,14 @@ func BenchmarkBlockUnblock(b *testing.B) {
 		blockWriter(compressorBlocks, "output.bin")
 	}
 	b.StopTimer()
-	
-	err := os.Remove("input.bin")
+}
 
-      	if err != nil {
-         	 panic(err)
-      	}
-
-	err = os.Remove("output.bin")
-
-      	if err != nil {
-         	 panic(err)
-      	}
+func BenchmarkUnblock(b *testing.B) {
+    	b.ResetTimer()
+     	for n := 0; n < b.N; n++ {
+		readerBlocks := unblockGenerator("./output.bin", 4)
+		compressorBlocks := blockProcessor(blockProcessor(readerBlocks, decomp), unshuff)
+		unblockWriter(compressorBlocks, "input.bin.ini")
+	}
+	b.StopTimer()
 }
